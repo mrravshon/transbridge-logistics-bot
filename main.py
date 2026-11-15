@@ -161,18 +161,23 @@ skip_photo = ReplyKeyboardMarkup(
 )
 
 
+
 # MENYULAR
 def menu(role):
     if role == "Yuk beruvchi":
         buttons = [
             [KeyboardButton(text="➕ Yuk joylashtirish")],
             [KeyboardButton(text="📋 Mening yuklarim")],
+            [KeyboardButton(text="🚛 Mos furalarni topish")],
+            [KeyboardButton(text="🤝 Mening bitimlarim")],
             [KeyboardButton(text="🔄 Rolni o‘zgartirish")]
         ]
     else:
         buttons = [
             [KeyboardButton(text="➕ Fura qo‘shish")],
             [KeyboardButton(text="🚛 Mening furalarim")],
+            [KeyboardButton(text="📦 Mos yuklarni topish")],
+            [KeyboardButton(text="🤝 Mening bitimlarim")],
             [KeyboardButton(text="🔄 Rolni o‘zgartirish")]
         ]
 
@@ -180,6 +185,7 @@ def menu(role):
         keyboard=buttons,
         resize_keyboard=True
     )
+
 
 
 # START
