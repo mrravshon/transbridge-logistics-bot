@@ -301,6 +301,7 @@ async def my_cargo(message: Message):
 async def other_messages(message: Message, state: FSMContext):
         if message.contact:
         return
+    
     current = await state.get_state()
 
     if current == "registration_name":
