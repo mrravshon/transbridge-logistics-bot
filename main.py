@@ -24,7 +24,12 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 # DATABASE
-db = sqlite3.connect("transbridge.db", check_same_thread=False)
+os.makedirs("/app/data", exist_ok=True)
+
+db = sqlite3.connect(
+    "/app/data/transbridge.db",
+    check_same_thread=False
+)
 
 db.execute("""
 CREATE TABLE IF NOT EXISTS users (
