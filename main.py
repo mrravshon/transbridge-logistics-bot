@@ -111,6 +111,168 @@ CREATE TABLE IF NOT EXISTS deal_messages (
 db.commit()
 
 
+# ==========================================
+# TRANSBRIDGE: YANGI LOGISTIKA MA'LUMOTLARI
+# ==========================================
+
+# Eski bazaga yangi ustunlarni xavfsiz qo'shish
+def add_column_if_missing(table, column, definition):
+    columns = {
+        row[1] for row in db.execute(
+            f"PRAGMA table_info({table})"
+        ).fetchall()
+    }
+
+    if column not in columns:
+        db.execute(
+            f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+        )
+
+
+# Yuk joylashuv koordinatalari
+add_column_if_missing("cargo", "origin_lat", "REAL")
+add_column_if_missing("cargo", "origin_lon", "REAL")
+add_column_if_missing("cargo", "destination_lat", "REAL")
+add_column_if_missing("cargo", "destination_lon", "REAL")
+
+# Fura joylashuv koordinatalari va marka/modeli
+add_column_if_missing("trucks", "location_lat", "REAL")
+add_column_if_missing("trucks", "location_lon", "REAL")
+add_column_if_missing("trucks", "make", "TEXT")
+add_column_if_missing("trucks", "model", "TEXT")
+
+
+# TRANSPORT TURLARI KATALOGI
+db.execute("""
+CREATE TABLE IF NOT EXISTS vehicle_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+)
+""")
+
+vehicle_types_list = [
+    "Tent (Curtainsider)",
+    "Refrijerator",
+    "Izoterm",
+    "Furgon",
+    "Mega",
+    "Jumbo",
+    "Konteyner tashuvchi",
+    "Ochiq platforma",
+    "Tral (Lowbed)",
+    "Samosval",
+    "Sisterna",
+    "Avtovoz",
+    "Don tashuvchi",
+    "Hayvon tashuvchi",
+    "Yog'och tashuvchi",
+    "Beton tashuvchi",
+    "Sement tashuvchi",
+    "Kimyoviy yuk tashuvchi",
+    "Og'ir yuk tashuvchi",
+    "Maxsus kranli transport",
+    "Hooklift",
+    "Walking Floor",
+    "Swap Body",
+    "Furgon (Van)",
+    "Boshqa maxsus transport"
+]
+
+db.executemany(
+    "INSERT OR IGNORE INTO vehicle_types (name) VALUES (?)",
+    [(x,) for x in vehicle_types_list]
+)
+
+
+# FURA MARKALARI
+db.execute("""
+CREATE TABLE IF NOT EXISTS vehicle_makes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+)
+""")
+
+vehicle_makes_list = [
+    "Volvo",
+    "Scania",
+    "Mercedes-Benz",
+    "MAN",
+    "DAF",
+    "Renault Trucks",
+    "Iveco",
+    "Ford Trucks",
+    "KamAZ",
+    "MAZ",
+    "Shacman",
+    "Sinotruk (HOWO)",
+    "FAW",
+    "Dongfeng",
+    "Foton",
+    "Isuzu",
+    "Hino",
+    "Tata",
+    "Ashok Leyland",
+    "Freightliner",
+    "Kenworth",
+    "Peterbilt",
+    "International",
+    "Mack"
+]
+
+db.executemany(
+    "INSERT OR IGNORE INTO vehicle_makes (name) VALUES (?)",
+    [(x,) for x in vehicle_makes_list]
+)
+
+
+# FURA MODELLARI
+db.execute("""
+CREATE TABLE IF NOT EXISTS vehicle_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    make TEXT NOT NULL,
+    model TEXT NOT NULL,
+    UNIQUE(make, model)
+)
+""")
+
+vehicle_models_list = {
+    "Volvo": ["FH", "FM", "FMX", "FE"],
+    "Scania": ["R Series", "S Series", "G Series", "P Series"],
+    "Mercedes-Benz": ["Actros", "Arocs", "Atego", "Axor"],
+    "MAN": ["TGX", "TGS", "TGM", "TGL"],
+    "DAF": ["XF", "XG", "XG+", "CF"],
+    "Renault Trucks": ["T", "C", "K", "D"],
+    "Iveco": ["S-Way", "X-Way", "Eurocargo", "Stralis"],
+    "Ford Trucks": ["F-MAX", "1848T", "3542T"],
+    "KamAZ": ["54901", "6520", "5490", "65115"],
+    "MAZ": ["5440", "6430", "6501"],
+    "Shacman": ["X3000", "X5000", "F3000"],
+    "Sinotruk (HOWO)": ["HOWO T7H", "HOWO A7", "HOWO NX"],
+    "FAW": ["J6P", "J7", "JH6"],
+    "Dongfeng": ["KL", "KC", "GX"],
+    "Foton": ["Auman EST", "Auman GTL"],
+    "Isuzu": ["Giga", "F-Series"],
+    "Hino": ["700 Series", "500 Series"],
+    "Tata": ["Prima", "Signa"],
+    "Ashok Leyland": ["AVTR", "Captain"],
+    "Freightliner": ["Cascadia", "Coronado"],
+    "Kenworth": ["T680", "T880", "W900"],
+    "Peterbilt": ["579", "567", "389"],
+    "International": ["LT Series", "RH Series"],
+    "Mack": ["Anthem", "Granite", "Pinnacle"]
+}
+
+for make, models in vehicle_models_list.items():
+    for model in models:
+        db.execute("""
+            INSERT OR IGNORE INTO vehicle_models (make, model)
+            VALUES (?, ?)
+        """, (make, model))
+
+
+db.commit()
+
+
 # HOLATLAR
 class RegistrationForm(StatesGroup):
     name = State()
