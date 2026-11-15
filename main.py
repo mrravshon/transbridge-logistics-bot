@@ -72,6 +72,42 @@ CREATE TABLE IF NOT EXISTS trucks (
 db.commit()
 
 
+# BITIMLAR VA MUZOKARALAR BAZASI
+
+db.execute("""
+CREATE TABLE IF NOT EXISTS deals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cargo_id INTEGER NOT NULL,
+    truck_id INTEGER NOT NULL,
+    cargo_owner_id INTEGER NOT NULL,
+    carrier_id INTEGER NOT NULL,
+    proposer_id INTEGER NOT NULL,
+    accepter_id INTEGER NOT NULL,
+    agreed_price TEXT,
+    agreed_weight TEXT,
+    agreed_details TEXT,
+    status TEXT DEFAULT 'negotiating',
+    proposer_confirmed INTEGER DEFAULT 0,
+    accepter_confirmed INTEGER DEFAULT 0,
+    proposer_fee INTEGER DEFAULT 0,
+    accepter_fee INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+db.execute("""
+CREATE TABLE IF NOT EXISTS deal_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id INTEGER NOT NULL,
+    sender_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
+db.commit()
+
+
 # HOLATLAR
 class RegistrationForm(StatesGroup):
     name = State()
