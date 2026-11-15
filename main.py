@@ -11,7 +11,10 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
-    KeyboardButton
+    KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery
 )
 
 # BOT
@@ -641,6 +644,208 @@ async def my_trucks(message: Message):
             )
         else:
             await message.answer(text)
+
+
+# =================================
+# MOS FURALARNI TOPISH
+# =================================
+
+import re
+
+def get_number(value):
+    match = re.search(r"\d+(?:[.,]\d+)?", str(value))
+    if match:
+        return float(match.group().replace(",", "."))
+    return None
+
+
+@dp.message(F.text == "🚛 Mos furalarni topish")
+async def find_trucks(message: Message):
+
+    cargo = db.execute("""
+        SELECT id, origin, destination, cargo_type,
+               weight, vehicle
+        FROM cargo
+        WHERE user_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+    """, (message.from_user.id,)).fetchone()
+
+    if not cargo:
+        await message.answer(
+            "Avval yuk joylashtiring."
+        )
+        return
+
+    cargo_id = cargo[0]
+    cargo_weight = get_number(cargo[4])
+
+    trucks = db.execute("""
+        SELECT t.id, t.user_id, t.vehicle_type,
+               t.plate, t.location, t.route, t.capacity,
+               u.name
+        FROM trucks t
+        JOIN users u ON u.telegram_id = t.user_id
+        WHERE t.user_id != ?
+        ORDER BY t.id DESC
+    """, (message.from_user.id,)).fetchall()
+
+    candidates = []
+
+    for truck in trucks:
+        capacity = get_number(truck[6])
+
+        if (
+            cargo_weight is not None
+            and capacity is not None
+            and capacity < cargo_weight
+        ):
+            continue
+
+        candidates.append(truck)
+
+    if not candidates:
+        await message.answer(
+            "Hozircha yukingizga mos kelishi mumkin "
+            "bo‘lgan furalar topilmadi."
+        )
+        return
+
+    await message.answer(
+        f"🚛 Yukingiz: {cargo[3]}\n"
+        f"📍 {cargo[1]} → {cargo[2]}\n"
+        f"⚖️ Og‘irligi: {cargo[4]} tonna\n\n"
+        "Quyidagi furalar dastlabki saralashdan o‘tdi.\n"
+        "Transport turi va yo‘nalishini ham tekshiring:"
+    )
+
+    for truck in candidates[:10]:
+
+        text = (
+            f"🚛 Fura #{truck[0]}\n"
+            f"👤 Tashuvchi: {truck[7]}\n"
+            f"Transport: {truck[2]}\n"
+            f"Raqami: {truck[3]}\n"
+            f"Joylashuvi: {truck[4]}\n"
+            f"Yo‘nalishi: {truck[5]}\n"
+            f"Yuk ko‘tarishi: {truck[6]}"
+        )
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="🤝 Taklif yuborish",
+                    callback_data=(
+                        f"offertruck:{cargo_id}:{truck[0]}"
+                    )
+                )
+            ]]
+        )
+
+        await message.answer(
+            text,
+            reply_markup=keyboard
+        )
+
+
+# TAKLIF YUBORISH
+
+@dp.callback_query(F.data.startswith("offertruck:"))
+async def offer_truck(callback: CallbackQuery):
+
+    _, cargo_id, truck_id = callback.data.split(":")
+
+    cargo = db.execute("""
+        SELECT id, user_id, origin, destination,
+               cargo_type, weight, price
+        FROM cargo WHERE id = ?
+    """, (int(cargo_id),)).fetchone()
+
+    truck = db.execute("""
+        SELECT id, user_id, vehicle_type,
+               plate, location, capacity
+        FROM trucks WHERE id = ?
+    """, (int(truck_id),)).fetchone()
+
+    if not cargo or not truck:
+        await callback.answer(
+            "E'lon yoki fura topilmadi.",
+            show_alert=True
+        )
+        return
+
+    if cargo[1] != callback.from_user.id:
+        await callback.answer(
+            "Bu yuk sizga tegishli emas.",
+            show_alert=True
+        )
+        return
+
+    if cargo[1] == truck[1]:
+        await callback.answer(
+            "O‘z furangizga taklif yubora olmaysiz.",
+            show_alert=True
+        )
+        return
+
+    existing = db.execute("""
+        SELECT id FROM deals
+        WHERE cargo_id = ? AND truck_id = ?
+        AND status = 'negotiating'
+    """, (int(cargo_id), int(truck_id))).fetchone()
+
+    if existing:
+        await callback.answer(
+            "Bu fura uchun taklif allaqachon yuborilgan.",
+            show_alert=True
+        )
+        return
+
+    db.execute("""
+        INSERT INTO deals (
+            cargo_id, truck_id,
+            cargo_owner_id, carrier_id,
+            proposer_id, accepter_id,
+            status
+        ) VALUES (?, ?, ?, ?, ?, ?, 'negotiating')
+    """, (
+        int(cargo_id),
+        int(truck_id),
+        cargo[1],
+        truck[1],
+        cargo[1],
+        truck[1]
+    ))
+
+    deal_id = db.execute(
+        "SELECT last_insert_rowid()"
+    ).fetchone()[0]
+
+    db.commit()
+
+    await callback.answer("Taklif yuborildi!")
+
+    await callback.message.answer(
+        f"✅ Taklif #{deal_id} yuborildi.\n"
+        "Tashuvchining javobini kuting."
+    )
+
+    try:
+        await bot.send_message(
+            truck[1],
+            f"🤝 Sizga yangi yuk taklifi keldi!\n\n"
+            f"Yuk: {cargo[4]}\n"
+            f"Yo‘nalish: {cargo[2]} → {cargo[3]}\n"
+            f"Og‘irlik: {cargo[5]} tonna\n"
+            f"Narx taklifi: {cargo[6]}\n\n"
+            f"Bitim raqami: #{deal_id}\n"
+            "Yuk egasi siz bilan kelishmoqchi."
+        )
+    except Exception:
+        await callback.message.answer(
+            "Tashuvchiga xabar yuborilmadi. "
+            "U botni ishga tushirganini tekshiring."
+        )
 
 
 # UMUMIY MATN XABARLARI
