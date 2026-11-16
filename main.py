@@ -302,6 +302,58 @@ class TruckForm(StatesGroup):
     photo = State()
 
 
+async def search_cities(query):
+    url = "https://nominatim.openstreetmap.org/search"
+
+    params = {
+        "q": query,
+        "format": "jsonv2",
+        "addressdetails": 1,
+        "limit": 5
+    }
+
+    headers = {
+        "User-Agent": "TransBridgeLogisticsBot/1.0"
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            url,
+            params=params,
+            headers=headers,
+            timeout=15
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
+
+
+def city_keyboard(cities, field):
+    buttons = []
+
+    for i, city in enumerate(cities):
+        address = city.get("address", {})
+
+        name = (
+            address.get("city")
+            or address.get("town")
+            or address.get("village")
+            or city.get("name")
+            or city.get("display_name", "Noma'lum joy")
+        )
+
+        country = address.get("country", "")
+        title = f"{name}, {country}"[:60]
+
+        buttons.append([
+            InlineKeyboardButton(
+                text=title,
+                callback_data=f"city:{field}:{i}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 # ASOSIY ROLLAR
 roles = ReplyKeyboardMarkup(
     keyboard=[
