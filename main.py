@@ -884,7 +884,7 @@ async def save_truck(message: Message, state: FSMContext, photo_id):
 
     data = await state.get_data()
 
-        db.execute("""
+    db.execute("""
         INSERT INTO trucks (
             user_id, vehicle_type, plate,
             location, route, capacity, photo_id,
@@ -915,8 +915,7 @@ async def save_truck(message: Message, state: FSMContext, photo_id):
         "Yana fura qo‘shishingiz mumkin.",
         reply_markup=menu("Tashuvchi")
     )
-
-
+    
 # MENING FURALARIM
 @dp.message(F.text == "🚛 Mening furalarim")
 async def my_trucks(message: Message):
