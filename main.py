@@ -350,6 +350,106 @@ def city_keyboard(cities, field):
         ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+    
+async def request_city(message, state, field):
+    query = message.text.strip()
+
+    if len(query) < 2:
+        await message.answer("Iltimos, shahar nomini to‘liqroq yozing.")
+        return
+
+    try:
+        cities = await search_cities(query)
+    except Exception:
+        await message.answer(
+            "Shaharlarni qidirishda xatolik yuz berdi. "
+            "Birozdan keyin qayta urinib ko‘ring."
+        )
+        return
+
+    if not cities:
+        await message.answer(
+            "Shahar topilmadi. Shahar nomi va davlatini yozib ko‘ring."
+        )
+        return
+
+    await state.update_data(city_results=cities)
+
+    await message.answer(
+        "Quyidagi variantlardan kerakli shaharni tanlang:",
+        reply_markup=city_keyboard(cities, field)
+    )
+
+
+@dp.callback_query(F.data.startswith("city:"))
+async def select_city(callback: CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    field = parts[1]
+    index = int(parts[2])
+
+    data = await state.get_data()
+    cities = data.get("city_results", [])
+
+    if index < 0 or index >= len(cities):
+        await callback.answer("Shahar ma'lumoti topilmadi.", show_alert=True)
+        return
+
+    city = cities[index]
+    address = city.get("address", {})
+
+    name = (
+        address.get("city")
+        or address.get("town")
+        or address.get("village")
+        or city.get("name")
+        or city.get("display_name", "Noma'lum joy")
+    )
+    country = address.get("country", "")
+    city_name = f"{name}, {country}".strip(", ")
+
+    lat = float(city["lat"])
+    lon = float(city["lon"])
+
+    if field == "origin":
+        await state.update_data(
+            origin=city_name,
+            origin_lat=lat,
+            origin_lon=lon
+        )
+        await state.set_state(CargoForm.destination)
+        next_text = "2/9. Yuk qaysi shaharga yetkaziladi?"
+
+    elif field == "destination":
+        await state.update_data(
+            destination=city_name,
+            destination_lat=lat,
+            destination_lon=lon
+        )
+        await state.set_state(CargoForm.cargo_type)
+        next_text = "3/9. Yuk turi qanday?"
+
+    elif field == "truck_location":
+        await state.update_data(
+            location=city_name,
+            location_lat=lat,
+            location_lon=lon
+        )
+        await state.set_state(TruckForm.route)
+        next_text = (
+            "4/6. Qaysi yo‘nalishlarda yuk tashiydi?\n"
+            "Masalan: Rossiya – O‘zbekiston"
+        )
+
+    else:
+        await callback.answer("Noto‘g‘ri tanlov.", show_alert=True)
+        return
+
+    await callback.answer("Shahar tanlandi!")
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(
+        f"✅ Tanlangan shahar: {city_name}\n\n{next_text}"
+    )
+
 # ASOSIY ROLLAR
 roles = ReplyKeyboardMarkup(
     keyboard=[
