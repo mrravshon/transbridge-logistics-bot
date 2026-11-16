@@ -2,6 +2,9 @@
 import os
 import sqlite3
 import asyncio
+import aiohttp
+import math
+import re
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
