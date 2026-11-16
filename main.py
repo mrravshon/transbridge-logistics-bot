@@ -300,7 +300,6 @@ class TruckForm(StatesGroup):
     route = State()
     capacity = State()
     photo = State()
-
 async def search_cities(query):
     url = "https://nominatim.openstreetmap.org/search"
 
@@ -351,7 +350,6 @@ def city_keyboard(cities, field):
         ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
 # ASOSIY ROLLAR
 roles = ReplyKeyboardMarkup(
     keyboard=[
