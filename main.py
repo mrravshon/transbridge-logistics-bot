@@ -655,18 +655,17 @@ async def new_cargo(message: Message, state: FSMContext):
     )
 
 
+
 @dp.message(CargoForm.origin)
 async def cargo_origin(message: Message, state: FSMContext):
-    await state.update_data(origin=message.text)
-    await state.set_state(CargoForm.destination)
-    await message.answer("2/9. Yuk qaysi shaharga yetkaziladi?")
+    await request_city(message, state, "origin")
+
 
 
 @dp.message(CargoForm.destination)
 async def cargo_destination(message: Message, state: FSMContext):
-    await state.update_data(destination=message.text)
-    await state.set_state(CargoForm.cargo_type)
-    await message.answer("3/9. Yuk turi qanday?")
+    await request_city(message, state, "destination")
+
 
 
 @dp.message(CargoForm.cargo_type)
@@ -720,22 +719,27 @@ async def cargo_payment(message: Message, state: FSMContext):
     data = await state.get_data()
 
     db.execute("""
-        INSERT INTO cargo (
-            user_id, origin, destination, cargo_type,
-            weight, volume, vehicle, load_date, price, payment
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        message.from_user.id,
-        data["origin"],
-        data["destination"],
-        data["cargo_type"],
-        data["weight"],
-        data["volume"],
-        data["vehicle"],
-        data["load_date"],
-        data["price"],
-        message.text
-    ))
+    INSERT INTO cargo (
+        user_id, origin, destination, cargo_type,
+        weight, volume, vehicle, load_date, price, payment,
+        origin_lat, origin_lon, destination_lat, destination_lon
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+""", (
+    message.from_user.id,
+    data["origin"],
+    data["destination"],
+    data["cargo_type"],
+    data["weight"],
+    data["volume"],
+    data["vehicle"],
+    data["load_date"],
+    data["price"],
+    message.text,
+    data["origin_lat"],
+    data["origin_lon"],
+    data["destination_lat"],
+    data["destination_lon"]
+))
 
     db.commit()
     await state.clear()
@@ -833,13 +837,7 @@ async def truck_plate(message: Message, state: FSMContext):
 
 @dp.message(TruckForm.location)
 async def truck_location(message: Message, state: FSMContext):
-    await state.update_data(location=message.text)
-    await state.set_state(TruckForm.route)
-
-    await message.answer(
-        "4/6. Qaysi yo‘nalishlarda yuk tashiydi?\n"
-        "Masalan: Rossiya – O‘zbekiston"
-    )
+    await request_city(message, state, "truck_location")
 
 
 @dp.message(TruckForm.route)
@@ -886,11 +884,12 @@ async def save_truck(message: Message, state: FSMContext, photo_id):
 
     data = await state.get_data()
 
-    db.execute("""
+        db.execute("""
         INSERT INTO trucks (
             user_id, vehicle_type, plate,
-            location, route, capacity, photo_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            location, route, capacity, photo_id,
+            location_lat, location_lon
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         message.from_user.id,
         data["vehicle_type"],
@@ -898,7 +897,9 @@ async def save_truck(message: Message, state: FSMContext, photo_id):
         data["location"],
         data["route"],
         data["capacity"],
-        photo_id
+        photo_id,
+        data["location_lat"],
+        data["location_lon"]
     ))
 
     db.commit()
@@ -971,6 +972,26 @@ def get_number(value):
         return float(match.group().replace(",", "."))
     return None
 
+def calculate_distance(lat1, lon1, lat2, lon2):
+    R = 6371
+
+    lat1, lon1, lat2, lon2 = map(
+        math.radians,
+        [lat1, lon1, lat2, lon2]
+    )
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2)
+        * math.sin(dlon / 2) ** 2
+    )
+
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
 
 @dp.message(F.text == "🚛 Mos furalarni topish")
 async def find_trucks(message: Message):
