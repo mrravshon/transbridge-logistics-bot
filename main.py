@@ -972,6 +972,18 @@ def get_number(value):
         return float(match.group().replace(",", "."))
     return None
 
+def transport_matches(cargo_vehicle, truck_vehicle):
+    cargo_type = str(cargo_vehicle).strip().lower()
+    truck_type = str(truck_vehicle).strip().lower()
+
+    if not cargo_type or not truck_type:
+        return False
+
+    return (
+        cargo_type in truck_type
+        or truck_type in cargo_type
+    )
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     R = 6371
 
@@ -998,7 +1010,7 @@ async def find_trucks(message: Message):
 
     cargo = db.execute("""
         SELECT id, origin, destination, cargo_type,
-               weight, vehicle
+               weight, vehicle, origin_lat, origin_lon
         FROM cargo
         WHERE user_id = ?
         ORDER BY id DESC
@@ -1006,18 +1018,25 @@ async def find_trucks(message: Message):
     """, (message.from_user.id,)).fetchone()
 
     if not cargo:
-        await message.answer(
-            "Avval yuk joylashtiring."
-        )
+        await message.answer("Avval yuk joylashtiring.")
         return
 
     cargo_id = cargo[0]
     cargo_weight = get_number(cargo[4])
+    cargo_lat = cargo[6]
+    cargo_lon = cargo[7]
+
+    if cargo_lat is None or cargo_lon is None:
+        await message.answer(
+            "Yuk joylashuvi koordinatalari topilmadi. "
+            "Iltimos, yukni qaytadan joylashtiring."
+        )
+        return
 
     trucks = db.execute("""
         SELECT t.id, t.user_id, t.vehicle_type,
                t.plate, t.location, t.route, t.capacity,
-               u.name
+               u.name, t.location_lat, t.location_lon
         FROM trucks t
         JOIN users u ON u.telegram_id = t.user_id
         WHERE t.user_id != ?
@@ -1025,23 +1044,41 @@ async def find_trucks(message: Message):
     """, (message.from_user.id,)).fetchall()
 
     candidates = []
+    used_radius = None
 
-    for truck in trucks:
-        capacity = get_number(truck[6])
+    for radius in [100, 200, 500]:
 
-        if (
-            cargo_weight is not None
-            and capacity is not None
-            and capacity < cargo_weight
-        ):
-            continue
+        candidates = []
 
-        candidates.append(truck)
+        for truck in trucks:
+            if not transport_matches(cargo[5], truck[2]):
+                continue
+            capacity = get_number(truck[6])
+            truck_lat = truck[8]
+            truck_lon = truck[9]
+
+            if truck_lat is None or truck_lon is None:
+                continue
+
+            if cargo_weight is not None:
+                if capacity is None or capacity < cargo_weight:
+                    continue
+
+            distance = calculate_distance(
+                cargo_lat, cargo_lon,
+                truck_lat, truck_lon
+            )
+
+            if distance <= radius:
+                candidates.append((truck, distance))
+
+        if candidates:
+            used_radius = radius
+            break
 
     if not candidates:
         await message.answer(
-            "Hozircha yukingizga mos kelishi mumkin "
-            "bo‘lgan furalar topilmadi."
+            "500 km radiusgacha yukingizga mos fura topilmadi."
         )
         return
 
@@ -1049,20 +1086,21 @@ async def find_trucks(message: Message):
         f"🚛 Yukingiz: {cargo[3]}\n"
         f"📍 {cargo[1]} → {cargo[2]}\n"
         f"⚖️ Og‘irligi: {cargo[4]} tonna\n\n"
-        "Quyidagi furalar dastlabki saralashdan o‘tdi.\n"
-        "Transport turi va yo‘nalishini ham tekshiring:"
+        f"🔎 Qidiruv radiusi: {used_radius} km\n"
+        f"Topilgan furalar: {len(candidates)}"
     )
 
-    for truck in candidates[:10]:
+    for truck, distance in candidates[:10]:
 
         text = (
             f"🚛 Fura #{truck[0]}\n"
             f"👤 Tashuvchi: {truck[7]}\n"
             f"Transport: {truck[2]}\n"
             f"Raqami: {truck[3]}\n"
-            f"Joylashuvi: {truck[4]}\n"
-            f"Yo‘nalishi: {truck[5]}\n"
-            f"Yuk ko‘tarishi: {truck[6]}"
+            f"📍 Joylashuvi: {truck[4]}\n"
+            f"🛣 Yo‘nalishi: {truck[5]}\n"
+            f"⚖️ Yuk ko‘tarishi: {truck[6]}\n"
+            f"📏 Yukdan masofasi: {distance:.1f} km"
         )
 
         keyboard = InlineKeyboardMarkup(
@@ -1080,7 +1118,6 @@ async def find_trucks(message: Message):
             text,
             reply_markup=keyboard
         )
-
 
 # TAKLIF YUBORISH
 
